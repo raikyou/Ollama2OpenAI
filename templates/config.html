@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>配置 - Ollama2OpenAI</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+    <style>
+        :root {
+            --primary-color: #4F46E5;
+            --hover-color: #4338CA;
+            --background-color: #F9FAFB;
+            --card-background: #FFFFFF;
+            --text-color: #111827;
+            --text-secondary: #6B7280;
+            --border-color: #E5E7EB;
+            --success-color: #059669;
+            --error-color: #DC2626;
+            --input-background: #FFFFFF;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #6366F1;
+                --hover-color: #818CF8;
+                --background-color: #111827;
+                --card-background: #1F2937;
+                --text-color: #F9FAFB;
+                --text-secondary: #9CA3AF;
+                --border-color: #374151;
+                --success-color: #34D399;
+                --error-color: #EF4444;
+                --input-background: #374151;
+                --shadow-color: rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        * {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-background);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -1px var(--shadow-color);
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo {
+            margin-right: 1rem;
+            animation: spin 20s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--primary-color);
+        }
+
+        h2 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--hover-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient 6s ease infinite;
+            background-size: 200% 200%;
+        }
+
+        @keyframes gradient {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            opacity: 0;
+            transform: translateX(-20px);
+            animation: slideIn 0.6s ease forwards;
+        }
+
+        .form-group:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .form-group:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .form-group:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        .form-group:nth-child(4) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            background: var(--input-background);
+            color: var(--text-color);
+        }
+
+        textarea {
+            height: 200px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            line-height: 1.4;
+            resize: vertical;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            transform: translateY(-1px);
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button:hover {
+            background: var(--hover-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+
+        button:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(100, 100);
+                opacity: 0;
+            }
+        }
+
+        .message {
+            display: flex;
+            align-items: center;
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            animation: slideIn 0.3s ease-out;
+            backdrop-filter: blur(8px);
+        }
+
+        .success-icon,
+        .error-icon {
+            margin-right: 0.75rem;
+            font-size: 1.25rem;
+            animation: bounce 0.6s ease;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            20%,
+            50%,
+            80%,
+            100% {
+                transform: translateY(0);
+            }
+
+            40% {
+                transform: translateY(-6px);
+            }
+
+            60% {
+                transform: translateY(-3px);
+            }
+        }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .success {
+            background-color: rgba(5, 150, 105, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(5, 150, 105, 0.2);
+        }
+
+        .error {
+            background-color: rgba(220, 38, 38, 0.1);
+            color: var(--error-color);
+            border: 1px solid rgba(220, 38, 38, 0.2);
+        }
+
+        .help-text {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+
+        .form-group:hover .help-text {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .container {
+                padding: 1.5rem;
+            }
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem;
+            border-radius: 50%;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .theme-toggle svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--text-color);
+        }
+
+        /* 加载动画 */
+        .loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--primary-color);
+            opacity: 0.2;
+            border-radius: 8px;
+        }
+
+        .loading::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--primary-color);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            z-index: 1;
+        }
+
+        /* 快捷键提示 */
+        .shortcut-hint {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--card-background);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .form-group:hover .shortcut-hint {
+            opacity: 0.8;
+        }
+
+        /* 输入框图标 */
+        .input-wrapper {
+            position: relative;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            padding: 0.25rem;
+            color: var(--text-secondary);
+        }
+
+        /* 表单验证动画 */
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .invalid {
+            animation: shake 0.2s ease-in-out 2;
+            border-color: var(--error-color) !important;
+        }
+
+        /* 键盘快捷键提示 */
+        .shortcuts-panel {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: var(--card-background);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px var(--shadow-color);
+            font-size: 0.875rem;
+            transform: translateY(100%);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .shortcuts-panel.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .shortcuts-panel kbd {
+            background: var(--input-background);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 6a6 6 0 0 0-6 6 6 6 0 0 0 6 6 6 6 0 0 0 6-6 6 6 0 0 0-6-6z" />
+        </svg>
+    </button>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+            </div>
+            <h2>Ollama2OpenAI 配置</h2>
+        </div>
+        <form method="post" action="/config" id="configForm">
+            <div class="form-group">
+                <label>管理密码</label>
+                <div class="input-wrapper">
+                    <input type="password" name="admin_password" value="{{ config.admin_password }}" required>
+                    <span class="toggle-password" title="显示/隐藏密码">👁️</span>
+                    <span class="shortcut-hint">Alt + 1</span>
+                </div>
+                <div class="help-text">用于登录管理界面的密码</div>
+            </div>
+            <div class="form-group">
+                <label>OpenAI API Key</label>
+                <div class="input-wrapper">
+                    <input type="password" name="openai_api_key" value="{{ config.openai_api_key }}" required>
+                    <span class="toggle-password" title="显示/隐藏密码">👁️</span>
+                    <span class="shortcut-hint">Alt + 2</span>
+                </div>
+                <div class="help-text">用于访问 OpenAI 兼容接口的 API 密钥</div>
+            </div>
+            <div class="form-group">
+                <label>OpenAI API Base URL</label>
+                <div class="input-wrapper">
+                    <input type="text" name="openai_api_base" value="{{ config.openai_api_base }}" required>
+                    <span class="shortcut-hint">Alt + 3</span>
+                </div>
+                <div class="help-text">OpenAI 兼容接口的基础 URL</div>
+            </div>
+            <div class="form-group">
+                <label>模型映射</label>
+                <div class="input-wrapper">
+                    <textarea name="model_mapping" required>{{ model_mapping_json }}</textarea>
+                    <span class="shortcut-hint">Alt + 4</span>
+                </div>
+                <div class="help-text">Ollama 模型到 OpenAI 模型的映射关系（JSON 格式）</div>
+            </div>
+            <button type="submit">保存配置</button>
+            {% if success %}
+            <div class="message success">
+                <div class="success-icon">✓</div>
+                <div class="message-content">{{ success }}</div>
+            </div>
+            {% endif %}
+            {% if error %}
+            <div class="message error">
+                <div class="error-icon">⚠</div>
+                <div class="message-content">{{ error }}</div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="shortcuts-panel" id="shortcutsPanel">
+        <h3>键盘快捷键</h3>
+        <p><kbd>Alt + 1</kbd> 聚焦管理密码</p>
+        <p><kbd>Alt + 2</kbd> 聚焦 API Key</p>
+        <p><kbd>Alt + 3</kbd> 聚焦 Base URL</p>
+        <p><kbd>Alt + 4</kbd> 聚焦模型映射</p>
+        <p><kbd>Alt + S</kbd> 保存配置</p>
+        <p><kbd>Alt + T</kbd> 切换主题</p>
+        <p><kbd>Alt + H</kbd> 显示/隐藏此面板</p>
+        <p><kbd>Esc</kbd> 关闭此面板</p>
+    </div>
+
+    <script>
+        // 主题切换
+        const themeToggle = document.getElementById('themeToggle');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+        let isDark = prefersDark.matches;
+
+        function toggleTheme() {
+            isDark = !isDark;
+            document.documentElement.style.setProperty('color-scheme', isDark ? 'dark' : 'light');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const icon = themeToggle.querySelector('svg');
+            icon.innerHTML = isDark
+                ? '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+                : '<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 6a6 6 0 0 0-6 6 6 6 0 0 0 6 6 6 6 0 0 0 6-6 6 6 0 0 0-6-6z"/>';
+        }
+
+        themeToggle.addEventListener('click', toggleTheme);
+
+        // 密码显示/隐藏
+        document.querySelectorAll('.toggle-password').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                const input = e.target.previousElementSibling;
+                const type = input.getAttribute('type');
+                input.setAttribute('type', type === 'password' ? 'text' : 'password');
+                e.target.textContent = type === 'password' ? '👁️‍🗨️' : '👁️';
+            });
+        });
+
+        // 表单提交动画
+        const form = document.getElementById('configForm');
+        form.addEventListener('submit', (e) => {
+            const button = form.querySelector('button[type="submit"]');
+            button.classList.add('loading');
+            // 表单验证
+            const inputs = form.querySelectorAll('input, textarea');
+            let isValid = true;
+            inputs.forEach(input => {
+                if (!input.checkValidity()) {
+                    input.classList.add('invalid');
+                    isValid = false;
+                    setTimeout(() => input.classList.remove('invalid'), 500);
+                }
+            });
+            if (!isValid) {
+                e.preventDefault();
+                button.classList.remove('loading');
+            }
+        });
+
+        // 键盘快捷键
+        const shortcutsPanel = document.getElementById('shortcutsPanel');
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey) {
+                switch (e.key) {
+                    case '1':
+                        document.querySelector('[name="admin_password"]').focus();
+                        break;
+                    case '2':
+                        document.querySelector('[name="openai_api_key"]').focus();
+                        break;
+                    case '3':
+                        document.querySelector('[name="openai_api_base"]').focus();
+                        break;
+                    case '4':
+                        document.querySelector('[name="model_mapping"]').focus();
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        form.submit();
+                        break;
+                    case 't':
+                        e.preventDefault();
+                        toggleTheme();
+                        break;
+                    case 'h':
+                        e.preventDefault();
+                        shortcutsPanel.classList.toggle('show');
+                        break;
+                }
+            } else if (e.key === 'Escape') {
+                shortcutsPanel.classList.remove('show');
+            }
+        });
+
+        // 自动显示快捷键面板
+        setTimeout(() => {
+            shortcutsPanel.classList.add('show');
+            setTimeout(() => {
+                shortcutsPanel.classList.remove('show');
+            }, 3000);
+        }, 1000);
+
+        // 初始化主题
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            isDark = savedTheme === 'dark';
+            document.documentElement.style.setProperty('color-scheme', savedTheme);
+            updateThemeIcon();
+        }
+    </script>
+</body>
+
+</html>
