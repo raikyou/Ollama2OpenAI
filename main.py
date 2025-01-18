@@ -193,12 +193,22 @@ async def chat(request: ChatRequest):
             "Content-Type": "application/json"
         }
         
+        print(f"发送请求到 OpenAI: {openai_body}")  # 添加日志
+        
         # 发送请求到OpenAI兼容接口
         response = await client.post(
             f"{config.openai_api_base}/v1/chat/completions",
             json=openai_body,
             headers=headers
         )
+        
+        if response.status_code != 200:
+            error_detail = await response.text()
+            print(f"OpenAI API 错误: {error_detail}")  # 添加日志
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenAI API 错误: {error_detail}"
+            )
         
         if request.stream:
             # 处理流式响应
@@ -219,7 +229,8 @@ async def chat(request: ChatRequest):
                                         },
                                         "done": choice.get("finish_reason") is not None
                                     }) + "\n"
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            print(f"JSON 解析错误: {e}, chunk: {chunk}")  # 添加日志
                             continue
                 
                 # 发送最后一个完成消息
@@ -244,10 +255,18 @@ async def chat(request: ChatRequest):
                     "done": True
                 }
             else:
-                raise HTTPException(status_code=500, detail="No response from model")
+                print(f"OpenAI 响应缺少 choices: {data}")  # 添加日志
+                raise HTTPException(status_code=500, detail="OpenAI API 返回了无效的响应格式")
         
+    except httpx.RequestError as e:
+        print(f"请求错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"请求 OpenAI API 失败: {str(e)}")
+    except json.JSONDecodeError as e:
+        print(f"JSON 解析错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"解析 OpenAI 响应失败: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"未知错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"处理请求时发生错误: {str(e)}")
 
 @app.post("/api/generate")
 async def generate(request: GenerateRequest):
