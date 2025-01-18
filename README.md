@@ -14,7 +14,20 @@
 
 ## 快速开始 🚀
 
-### 使用 Docker（推荐）
+### 使用 Docker Hub（最简单）
+
+```bash
+# 创建数据目录
+mkdir -p data
+
+# 直接运行容器
+docker run -d \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  lynricsy/ollama2openai:latest
+```
+
+### 本地构建（开发者）
 
 ```bash
 # 构建镜像
@@ -23,7 +36,7 @@ docker build -t ollama2openai .
 # 创建数据目录
 mkdir -p data
 
-# 运行容器（使用数据持久化）
+# 运行容器
 docker run -d \
   -p 8000:8000 \
   -v $(pwd)/data:/app/data \
