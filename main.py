@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import httpx
 import uvicorn
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from config import config
 from pydantic import BaseModel
 
@@ -37,6 +37,11 @@ class ChatRequest(BaseModel):
     messages: List[Message]
     stream: Optional[bool] = True
     format: Optional[str] = None
+    options: Optional[Dict] = None
+
+class EmbeddingRequest(BaseModel):
+    model: str
+    prompt: Union[str, List[str]]
     options: Optional[Dict] = None
 
 # 会话管理（简单实现，生产环境建议使用更安全的方式）
@@ -348,6 +353,64 @@ async def generate(request: GenerateRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/embeddings")
+async def create_embedding(request: EmbeddingRequest):
+    try:
+        # 将 Ollama 格式转换为 OpenAI 格式
+        openai_body = {
+            "model": config.model_mapping.get(request.model, request.model),
+            "input": request.prompt
+        }
+        
+        if request.options:
+            # 转换 Ollama 选项到 OpenAI 参数
+            if "dimensions" in request.options:
+                openai_body["dimensions"] = request.options["dimensions"]
+        
+        # 准备请求头
+        headers = {
+            "Authorization": f"Bearer {config.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"发送 embedding 请求到 OpenAI: {openai_body}")  # 添加日志
+        
+        # 发送请求到 OpenAI 兼容接口
+        response = await client.post(
+            f"{config.openai_api_base}/v1/embeddings",
+            json=openai_body,
+            headers=headers
+        )
+        
+        if response.status_code != 200:
+            error_detail = await response.text()
+            print(f"OpenAI API 错误: {error_detail}")  # 添加日志
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"OpenAI API 错误: {error_detail}"
+            )
+        
+        # 处理响应
+        data = response.json()
+        if "data" in data and len(data["data"]) > 0:
+            embeddings = [item["embedding"] for item in data["data"]]
+            return {
+                "embedding": embeddings[0] if isinstance(request.prompt, str) else embeddings
+            }
+        else:
+            print(f"OpenAI 响应缺少 embeddings: {data}")  # 添加日志
+            raise HTTPException(status_code=500, detail="OpenAI API 返回了无效的响应格式")
+        
+    except httpx.RequestError as e:
+        print(f"请求错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"请求 OpenAI API 失败: {str(e)}")
+    except json.JSONDecodeError as e:
+        print(f"JSON 解析错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"解析 OpenAI 响应失败: {str(e)}")
+    except Exception as e:
+        print(f"未知错误: {str(e)}")  # 添加日志
+        raise HTTPException(status_code=500, detail=f"处理请求时发生错误: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 

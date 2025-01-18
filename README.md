@@ -11,6 +11,7 @@
 - 🌓 自动深色/浅色主题
 - ⌨️ 完整的键盘快捷键支持
 - 🔒 可选的 API 认证
+- 🧮 支持 Embedding 模型
 
 ## 界面预览 ✨
 
@@ -134,6 +135,28 @@ curl http://localhost:8000/api/generate -d '{
   "model": "llama2",
   "prompt": "你好！",
   "system": "你是一个友好的助手。"
+}'
+```
+
+### Embedding 接口
+
+```bash
+# 单个文本
+curl http://localhost:8000/api/embeddings -d '{
+  "model": "text-embedding-3-small",
+  "prompt": "你好！",
+  "options": {
+    "dimensions": 1536
+  }
+}'
+
+# 批量文本
+curl http://localhost:8000/api/embeddings -d '{
+  "model": "text-embedding-3-small",
+  "prompt": ["你好！", "世界！"],
+  "options": {
+    "dimensions": 1536
+  }
 }'
 ```
 
