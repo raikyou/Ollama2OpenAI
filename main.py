@@ -2,18 +2,42 @@ import os
 import json
 import asyncio
 from fastapi import FastAPI, Request, HTTPException, Form, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import httpx
 import uvicorn
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from config import config
+from pydantic import BaseModel
 
 app = FastAPI()
 client = httpx.AsyncClient()
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
+
+# 数据模型
+class Message(BaseModel):
+    role: str
+    content: str
+
+class GenerateRequest(BaseModel):
+    model: str
+    prompt: str
+    system: Optional[str] = None
+    template: Optional[str] = None
+    context: Optional[List[int]] = None
+    stream: Optional[bool] = True
+    raw: Optional[bool] = False
+    format: Optional[str] = None
+    options: Optional[Dict] = None
+
+class ChatRequest(BaseModel):
+    model: str
+    messages: List[Message]
+    stream: Optional[bool] = True
+    format: Optional[str] = None
+    options: Optional[Dict] = None
 
 # 会话管理（简单实现，生产环境建议使用更安全的方式）
 sessions = set()
@@ -58,15 +82,16 @@ async def save_config(
     request: Request,
     admin_password: str = Form(...),
     openai_api_key: str = Form(...),
+    ollama_api_key: str = Form(None),
     openai_api_base: str = Form(...),
     model_mapping: str = Form(...),
     _=Depends(is_authenticated)
 ):
     try:
-        # 验证并更新配置
         model_mapping_dict = json.loads(model_mapping)
         config.admin_password = admin_password
         config.openai_api_key = openai_api_key
+        config.ollama_api_key = ollama_api_key if ollama_api_key else None
         config.openai_api_base = openai_api_base
         config.model_mapping = model_mapping_dict
         config.save()
@@ -91,50 +116,76 @@ async def save_config(
             }
         )
 
-@app.get("/v1/models")
+@app.get("/api/tags")
 async def list_models():
     try:
-        # 获取Ollama可用模型列表
-        response = await client.get("http://localhost:11434/api/tags")
-        ollama_models = response.json()
+        # 获取OpenAI可用模型列表
+        headers = {
+            "Authorization": f"Bearer {config.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        response = await client.get(
+            f"{config.openai_api_base}/v1/models",
+            headers=headers
+        )
+        openai_models = response.json()
         
-        # 转换为OpenAI格式
+        # 转换为Ollama格式
         models = []
-        for model in ollama_models.get("models", []):
-            model_name = model.get("name", "")
-            models.append({
-                "id": model_name,
-                "object": "model",
-                "created": 1677610602,
-                "owned_by": "ollama",
-                "permission": [],
-                "root": model_name,
-                "parent": None
-            })
+        model_details = {
+            "format": "gguf",
+            "family": "llama",
+            "families": ["llama"],
+            "parameter_size": "7B",
+            "quantization_level": "Q4_0"
+        }
         
-        return {"object": "list", "data": models}
+        # 添加所有原始模型
+        for model in openai_models.get("data", []):
+            model_id = model.get("id", "")
+            models.append({
+                "name": model_id,
+                "modified_at": model.get("created"),
+                "size": 0,
+                "digest": "",
+                "details": model_details
+            })
+            
+            # 添加映射的别名
+            aliases = [k for k, v in config.model_mapping.items() if v == model_id]
+            for alias in aliases:
+                models.append({
+                    "name": alias,
+                    "modified_at": model.get("created"),
+                    "size": 0,
+                    "digest": "",
+                    "details": model_details,
+                    "alias_for": model_id  # 添加一个字段表明这是别名
+                })
+        
+        return {"models": models}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/v1/chat/completions")
-async def chat_completions(request: Request):
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
     try:
-        # 获取原始请求数据
-        body = await request.json()
-        
         # 将Ollama格式转换为OpenAI格式
-        model = body.get("model", "gpt-3.5-turbo")
-        messages = body.get("messages", [])
-        
-        # 准备OpenAI请求体
         openai_body = {
-            "model": config.model_mapping.get(model, model),  # 使用配置的映射
-            "messages": messages,
-            "temperature": body.get("temperature", 0.7),
-            "max_tokens": body.get("max_tokens", None),
-            "stream": body.get("stream", False)
+            "model": config.model_mapping.get(request.model, request.model),
+            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "stream": request.stream
         }
+        
+        if request.options:
+            # 转换Ollama选项到OpenAI参数
+            if "temperature" in request.options:
+                openai_body["temperature"] = request.options["temperature"]
+            if "top_p" in request.options:
+                openai_body["top_p"] = request.options["top_p"]
+            if "num_ctx" in request.options:
+                openai_body["max_tokens"] = request.options["num_ctx"]
         
         # 准备请求头
         headers = {
@@ -149,7 +200,132 @@ async def chat_completions(request: Request):
             headers=headers
         )
         
-        return response.json()
+        if request.stream:
+            # 处理流式响应
+            async def stream_response():
+                async for chunk in response.aiter_lines():
+                    if chunk:
+                        try:
+                            data = json.loads(chunk.removeprefix("data: "))
+                            if "choices" in data and len(data["choices"]) > 0:
+                                choice = data["choices"][0]
+                                if "delta" in choice and "content" in choice["delta"]:
+                                    yield json.dumps({
+                                        "model": request.model,
+                                        "created_at": data.get("created", ""),
+                                        "message": {
+                                            "role": "assistant",
+                                            "content": choice["delta"]["content"]
+                                        },
+                                        "done": choice.get("finish_reason") is not None
+                                    }) + "\n"
+                        except json.JSONDecodeError:
+                            continue
+                
+                # 发送最后一个完成消息
+                yield json.dumps({
+                    "model": request.model,
+                    "created_at": "",
+                    "done": True
+                }) + "\n"
+            
+            return StreamingResponse(stream_response(), media_type="text/event-stream")
+        else:
+            # 处理非流式响应
+            data = response.json()
+            if "choices" in data and len(data["choices"]) > 0:
+                return {
+                    "model": request.model,
+                    "created_at": data.get("created", ""),
+                    "message": {
+                        "role": "assistant",
+                        "content": data["choices"][0]["message"]["content"]
+                    },
+                    "done": True
+                }
+            else:
+                raise HTTPException(status_code=500, detail="No response from model")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/generate")
+async def generate(request: GenerateRequest):
+    try:
+        # 构建消息列表
+        messages = []
+        if request.system:
+            messages.append({"role": "system", "content": request.system})
+        messages.append({"role": "user", "content": request.prompt})
+        
+        # 准备OpenAI请求体
+        openai_body = {
+            "model": config.model_mapping.get(request.model, request.model),
+            "messages": messages,
+            "stream": request.stream
+        }
+        
+        if request.options:
+            # 转换Ollama选项到OpenAI参数
+            if "temperature" in request.options:
+                openai_body["temperature"] = request.options["temperature"]
+            if "top_p" in request.options:
+                openai_body["top_p"] = request.options["top_p"]
+            if "num_ctx" in request.options:
+                openai_body["max_tokens"] = request.options["num_ctx"]
+        
+        # 准备请求头
+        headers = {
+            "Authorization": f"Bearer {config.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # 发送请求到OpenAI兼容接口
+        response = await client.post(
+            f"{config.openai_api_base}/v1/chat/completions",
+            json=openai_body,
+            headers=headers
+        )
+        
+        if request.stream:
+            # 处理流式响应
+            async def stream_response():
+                async for chunk in response.aiter_lines():
+                    if chunk:
+                        try:
+                            data = json.loads(chunk.removeprefix("data: "))
+                            if "choices" in data and len(data["choices"]) > 0:
+                                choice = data["choices"][0]
+                                if "delta" in choice and "content" in choice["delta"]:
+                                    yield json.dumps({
+                                        "model": request.model,
+                                        "created_at": data.get("created", ""),
+                                        "response": choice["delta"]["content"],
+                                        "done": choice.get("finish_reason") is not None
+                                    }) + "\n"
+                        except json.JSONDecodeError:
+                            continue
+                
+                # 发送最后一个完成消息
+                yield json.dumps({
+                    "model": request.model,
+                    "created_at": "",
+                    "done": True
+                }) + "\n"
+            
+            return StreamingResponse(stream_response(), media_type="text/event-stream")
+        else:
+            # 处理非流式响应
+            data = response.json()
+            if "choices" in data and len(data["choices"]) > 0:
+                return {
+                    "model": request.model,
+                    "created_at": data.get("created", ""),
+                    "response": data["choices"][0]["message"]["content"],
+                    "done": True
+                }
+            else:
+                raise HTTPException(status_code=500, detail="No response from model")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

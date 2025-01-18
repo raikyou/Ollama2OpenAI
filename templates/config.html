@@ -391,6 +391,7 @@
             border: 1px solid var(--border-color);
             opacity: 0;
             transition: opacity 0.2s ease;
+            z-index: 1;
         }
 
         .form-group:hover .shortcut-hint {
@@ -404,12 +405,13 @@
 
         .toggle-password {
             position: absolute;
-            right: 1rem;
+            right: 2.5rem;
             top: 50%;
             transform: translateY(-50%);
             cursor: pointer;
             padding: 0.25rem;
             color: var(--text-secondary);
+            z-index: 2;
         }
 
         /* 表单验证动画 */
@@ -462,6 +464,83 @@
             border: 1px solid var(--border-color);
             font-family: monospace;
         }
+
+        .model-mapping {
+            margin-top: 1rem;
+        }
+
+        .model-mapping-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .model-mapping-item input {
+            flex: 1;
+        }
+
+        .model-mapping-item button {
+            padding: 0.5rem;
+            min-width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .model-mapping-item button.remove {
+            background: var(--error-color);
+        }
+
+        .model-mapping-item button.remove:hover {
+            background: #ef4444;
+        }
+
+        .add-mapping {
+            margin-top: 1rem;
+            width: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .add-mapping svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .model-list {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--input-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .model-list-item {
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .model-list-item:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .model-list-item.alias {
+            padding-left: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        .model-list-item.alias::before {
+            content: "↳";
+            margin-right: 0.5rem;
+        }
     </style>
 </head>
 
@@ -503,20 +582,35 @@
                 <div class="help-text">用于访问 OpenAI 兼容接口的 API 密钥</div>
             </div>
             <div class="form-group">
+                <label>Ollama API Key</label>
+                <div class="input-wrapper">
+                    <input type="password" name="ollama_api_key" value="{{ config.ollama_api_key or '' }}">
+                    <span class="toggle-password" title="显示/隐藏密码">👁️</span>
+                    <span class="shortcut-hint">Alt + 3</span>
+                </div>
+                <div class="help-text">用于访问 Ollama API 的密钥（可选，留空则不使用认证）</div>
+            </div>
+            <div class="form-group">
                 <label>OpenAI API Base URL</label>
                 <div class="input-wrapper">
                     <input type="text" name="openai_api_base" value="{{ config.openai_api_base }}" required>
-                    <span class="shortcut-hint">Alt + 3</span>
+                    <span class="shortcut-hint">Alt + 4</span>
                 </div>
                 <div class="help-text">OpenAI 兼容接口的基础 URL</div>
             </div>
             <div class="form-group">
                 <label>模型映射</label>
-                <div class="input-wrapper">
-                    <textarea name="model_mapping" required>{{ model_mapping_json }}</textarea>
-                    <span class="shortcut-hint">Alt + 4</span>
+                <div class="help-text">为 OpenAI 模型配置别名，让它们在 Ollama 中显示为不同的名称</div>
+                <div id="modelMappings" class="model-mapping">
+                    <!-- 映射项会通过 JavaScript 动态添加 -->
                 </div>
-                <div class="help-text">Ollama 模型到 OpenAI 模型的映射关系（JSON 格式）</div>
+                <button type="button" class="add-mapping" onclick="addMapping()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    添加映射
+                </button>
+                <input type="hidden" name="model_mapping" id="modelMappingInput" required>
             </div>
             <button type="submit">保存配置</button>
             {% if success %}
@@ -538,8 +632,9 @@
         <h3>键盘快捷键</h3>
         <p><kbd>Alt + 1</kbd> 聚焦管理密码</p>
         <p><kbd>Alt + 2</kbd> 聚焦 API Key</p>
-        <p><kbd>Alt + 3</kbd> 聚焦 Base URL</p>
-        <p><kbd>Alt + 4</kbd> 聚焦模型映射</p>
+        <p><kbd>Alt + 3</kbd> 聚焦 Ollama API Key</p>
+        <p><kbd>Alt + 4</kbd> 聚焦 Base URL</p>
+        <p><kbd>Alt + 5</kbd> 聚焦模型映射</p>
         <p><kbd>Alt + S</kbd> 保存配置</p>
         <p><kbd>Alt + T</kbd> 切换主题</p>
         <p><kbd>Alt + H</kbd> 显示/隐藏此面板</p>
@@ -611,10 +706,13 @@
                         document.querySelector('[name="openai_api_key"]').focus();
                         break;
                     case '3':
-                        document.querySelector('[name="openai_api_base"]').focus();
+                        document.querySelector('[name="ollama_api_key"]').focus();
                         break;
                     case '4':
-                        document.querySelector('[name="model_mapping"]').focus();
+                        document.querySelector('[name="openai_api_base"]').focus();
+                        break;
+                    case '5':
+                        document.querySelector('.add-mapping').click();
                         break;
                     case 's':
                         e.preventDefault();
@@ -649,6 +747,114 @@
             document.documentElement.style.setProperty('color-scheme', savedTheme);
             updateThemeIcon();
         }
+
+        // 模型映射管理
+        let mappings = {};
+
+        try {
+            const savedMapping = document.getElementById('modelMappingInput').value;
+            mappings = savedMapping ? JSON.parse(savedMapping) : {};
+            // 确保隐藏输入框始终有一个有效的 JSON 值
+            document.getElementById('modelMappingInput').value = JSON.stringify(mappings);
+        } catch (e) {
+            mappings = {};
+            document.getElementById('modelMappingInput').value = '{}';
+        }
+
+        function updateMappingInput() {
+            document.getElementById('modelMappingInput').value = JSON.stringify(mappings);
+        }
+
+        function addMapping(alias = '', target = '') {
+            const container = document.getElementById('modelMappings');
+            const item = document.createElement('div');
+            item.className = 'model-mapping-item';
+
+            const aliasInput = document.createElement('input');
+            aliasInput.type = 'text';
+            aliasInput.placeholder = 'Ollama 中显示的名称';
+            aliasInput.value = alias;
+            aliasInput.addEventListener('input', () => {
+                if (alias) {
+                    delete mappings[alias];  // 删除旧的映射
+                }
+                const targetValue = targetInput.value;
+                if (aliasInput.value && targetValue) {
+                    mappings[aliasInput.value] = targetValue;
+                }
+                updateMappingInput();
+            });
+
+            const arrow = document.createElement('span');
+            arrow.textContent = '→';
+
+            const targetInput = document.createElement('input');
+            targetInput.type = 'text';
+            targetInput.placeholder = 'OpenAI 模型名称';
+            targetInput.value = target;
+            targetInput.addEventListener('input', () => {
+                const aliasValue = aliasInput.value;
+                if (aliasValue) {
+                    mappings[aliasValue] = targetInput.value;
+                }
+                updateMappingInput();
+            });
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'remove';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = () => {
+                if (aliasInput.value) {
+                    delete mappings[aliasInput.value];
+                }
+                updateMappingInput();
+                item.remove();
+            };
+
+            item.appendChild(aliasInput);
+            item.appendChild(arrow);
+            item.appendChild(targetInput);
+            item.appendChild(removeBtn);
+            container.appendChild(item);
+        }
+
+        // 初始化现有映射
+        for (const [alias, target] of Object.entries(mappings)) {
+            addMapping(alias, target);
+        }
+
+        // 自动获取可用模型列表
+        async function fetchModels() {
+            try {
+                const response = await fetch('/api/tags');
+                const data = await response.json();
+                const modelList = document.createElement('div');
+                modelList.className = 'model-list';
+
+                data.models.forEach(model => {
+                    const item = document.createElement('div');
+                    item.className = 'model-list-item' + (model.alias_for ? ' alias' : '');
+                    item.textContent = model.name + (model.alias_for ? ` (别名: ${model.alias_for})` : '');
+                    item.onclick = () => {
+                        // 点击时自动创建新的映射项
+                        if (!model.alias_for) {  // 只处理非别名模型
+                            const suggestedAlias = `ollama-${model.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+                            addMapping(suggestedAlias, model.name);
+                        }
+                    };
+                    modelList.appendChild(item);
+                });
+
+                const container = document.querySelector('.form-group');
+                container.appendChild(modelList);
+            } catch (e) {
+                console.error('Failed to fetch models:', e);
+            }
+        }
+
+        // 页面加载完成后获取模型列表
+        document.addEventListener('DOMContentLoaded', fetchModels);
     </script>
 </body>
 
