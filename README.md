@@ -20,9 +20,17 @@
 # 构建镜像
 docker build -t ollama2openai .
 
-# 运行容器
-docker run -d -p 8000:8000 ollama2openai
+# 创建数据目录
+mkdir -p data
+
+# 运行容器（使用数据持久化）
+docker run -d \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  ollama2openai
 ```
+
+配置文件会保存在 `data` 目录下，重启容器时会自动加载。
 
 ### 手动安装
 

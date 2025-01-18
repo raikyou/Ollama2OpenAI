@@ -8,13 +8,17 @@ class Config:
         self.ollama_api_key = None  # Ollama API Key，允许为空
         self.openai_api_base = "https://api.openai.com"  # OpenAI API Base URL
         self.model_mapping = {}  # 模型映射关系
+        
+        # 确保 data 目录存在
+        os.makedirs("data", exist_ok=True)
+        self.config_file = os.path.join("data", "config.json")
         self.load()
 
     def load(self):
         """从配置文件加载配置"""
-        if os.path.exists("config.json"):
+        if os.path.exists(self.config_file):
             try:
-                with open("config.json", "r", encoding="utf-8") as f:
+                with open(self.config_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.admin_password = data.get("admin_password", self.admin_password)
                     self.openai_api_key = data.get("openai_api_key", self.openai_api_key)
@@ -27,7 +31,7 @@ class Config:
     def save(self):
         """保存配置到文件"""
         try:
-            with open("config.json", "w", encoding="utf-8") as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump({
                     "admin_password": self.admin_password,
                     "openai_api_key": self.openai_api_key,
