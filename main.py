@@ -10,6 +10,7 @@ import uvicorn
 from typing import Dict, Any, List, Optional, Union
 from config import config
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 app = FastAPI()
 client = httpx.AsyncClient()
@@ -139,37 +140,60 @@ async def list_models():
         )
         openai_models = response.json()
         
-        # 转换为Ollama格式
         models = []
-        model_details = {
+        # 修改后的 model_details 基础模板
+        base_model_details = {
+            "parent_model": "",
             "format": "gguf",
-            "family": "llama",
-            "families": ["llama"],
-            "parameter_size": "7B",
-            "quantization_level": "Q4_0"
+            "family": "openai", 
+            "families": ["openai"], 
+            "parameter_size": "N/A", 
+            "quantization_level": "N/A"
         }
         
         # 添加所有原始模型
         for model in openai_models.get("data", []):
             model_id = model.get("id", "")
+            if not model_id: # 如果 model_id 为空则跳过
+                continue
+
+            name_with_tag = f"{model_id}:latest"
+            created_timestamp = model.get("created")
+            
+            if created_timestamp:
+                # 将 Unix 时间戳转换为带时区的 ISO 8601 格式字符串
+                modified_at_iso = datetime.fromtimestamp(created_timestamp, timezone.utc).isoformat()
+            else:
+                # 如果 OpenAI API 没有提供 created 时间戳，使用当前时间并格式化
+                modified_at_iso = datetime.now(timezone.utc).isoformat()
+
+            current_details = base_model_details.copy()
+            # 可选：更细致的 family 推断可以后续添加
+            # if "gpt" in model_id.lower():
+            #     current_details["family"] = "gpt"
+            #     current_details["families"] = ["gpt"]
+            
             models.append({
-                "name": model_id,
-                "modified_at": model.get("created"),
+                "name": name_with_tag,
+                "model": name_with_tag, 
+                "modified_at": modified_at_iso,
                 "size": 0,
-                "digest": "",
-                "details": model_details
+                "digest": "", 
+                "details": current_details
             })
             
             # 添加映射的别名
             aliases = [k for k, v in config.model_mapping.items() if v == model_id]
             for alias in aliases:
+                alias_details = base_model_details.copy()
+                # 别名也使用相同的 details 结构和时间戳
                 models.append({
-                    "name": alias,
-                    "modified_at": model.get("created"),
+                    "name": f"{alias}:latest",
+                    "model": f"{alias}:latest",
+                    "modified_at": modified_at_iso, # 使用原始模型的时间戳
                     "size": 0,
                     "digest": "",
-                    "details": model_details,
-                    "alias_for": model_id  # 添加一个字段表明这是别名
+                    "details": alias_details 
                 })
         
         return {"models": models}
