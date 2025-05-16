@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from fastapi import FastAPI, Request, HTTPException, Form, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import httpx
@@ -50,10 +50,14 @@ sessions = set()
 def is_authenticated(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id or session_id not in sessions:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise RedirectResponse(url="/login", status_code=302)
     return True
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=JSONResponse)
+async def root_status():
+    return {"status": "Ollama is running"}
+
+@app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = None):
     return templates.TemplateResponse("login.html", {"request": request, "error": error})
 
