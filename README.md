@@ -71,7 +71,7 @@ python main.py
 
 ## 配置说明 ⚙️
 
-访问 `http://localhost:8000` 进入配置界面，可配置以下内容：
+访问 `http://localhost:8000/login` 进入配置界面，可配置以下内容：
 
 - 管理密码：用于登录配置界面
 - OpenAI API Key：用于访问 OpenAI 兼容接口
