@@ -1,103 +1,15 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 env:
-  TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || 'test123' }}
-  TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY || 'sk-test' }}
-  TEST_OPENAI_API_BASE: ${{ secrets.TEST_OPENAI_API_BASE || 'https://api.openai.com' }}
-  TEST_MODEL_SOURCE: ${{ secrets.TEST_MODEL_SOURCE || 'gpt-4' }}
-  TEST_MODEL_TARGET: ${{ secrets.TEST_MODEL_TARGET || 'llama2' }}
+  REGISTRY: ghcr.io
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Build test image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          load: true
-          tags: ollama2openai-test:latest
-      
-      - name: Prepare test environment
-        run: |
-          mkdir -p data
-          echo '{
-            "admin_password": "${{ env.TEST_ADMIN_PASSWORD }}",
-            "openai_api_key": "${{ env.TEST_OPENAI_API_KEY }}",
-            "openai_api_base": "${{ env.TEST_OPENAI_API_BASE }}",
-            "model_mapping": {
-              "${{ env.TEST_MODEL_TARGET }}": "${{ env.TEST_MODEL_SOURCE }}"
-            }
-          }' > data/config.json
-      
-      - name: Start test container
-        run: |
-          docker run -d \
-            -p 8000:8000 \
-            -v $(pwd)/data:/app/data \
-            --name test-container \
-            ollama2openai-test:latest
-      
-      - name: Wait for service
-        run: sleep 5
-      
-      - name: Test model list endpoint
-        run: |
-          response=$(curl -s http://localhost:8000/api/tags)
-          echo "$response" | grep -q "${{ env.TEST_MODEL_TARGET }}" || (echo "Model list test failed" && exit 1)
-      
-      - name: Test chat endpoint
-        run: |
-          response=$(curl -s -X POST http://localhost:8000/api/chat \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "${{ env.TEST_MODEL_TARGET }}",
-              "messages": [{"role":"user","content":"test"}]
-            }')
-          echo "$response"
-          echo "$response" | grep -q "model" || (echo "Chat test failed" && exit 1)
-      
-      - name: Test generate endpoint
-        run: |
-          response=$(curl -s -X POST http://localhost:8000/api/generate \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "${{ env.TEST_MODEL_TARGET }}",
-              "prompt": "test"
-            }')
-          echo "$response"
-          echo "$response" | grep -q "model" || (echo "Generate test failed" && exit 1)
-      
-      - name: Check container logs
-        if: always()
-        run: docker logs test-container
-      
-      - name: Stop test container
-        if: always()
-        run: docker stop test-container && docker rm test-container
-
   publish:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
       packages: write
     
     steps:
@@ -105,41 +17,20 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get latest version
-        id: version
-        run: |
-          latest_version=$(git tag -l "v*" | sort -V | tail -n 1)
-          if [ -z "$latest_version" ]; then
-            latest_version="v1.0.0"
-          fi
-          major=$(echo $latest_version | cut -d. -f1 | tr -d 'v')
-          minor=$(echo $latest_version | cut -d. -f2)
-          patch=$(echo $latest_version | cut -d. -f3)
-          new_patch=$((patch + 1))
-          new_version="v$major.$minor.$new_patch"
-          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
-      
-      - name: Create and push tag
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git tag -a ${{ env.NEW_VERSION }} -m "🔖 Release ${{ env.NEW_VERSION }}"
-          git push origin ${{ env.NEW_VERSION }}
-      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Docker Hub
+  
+      - name: Log into registry ${{ env.REGISTRY }}
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
           push: true
-          tags: |
-            lynricsy/ollama2openai:latest
-            lynricsy/ollama2openai:${{ env.NEW_VERSION }} 
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/ollama2openai:latest
